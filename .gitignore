@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+drones.db
+mapa_pdp.png
+secuencias_drones.txt
+acronimos.tex
