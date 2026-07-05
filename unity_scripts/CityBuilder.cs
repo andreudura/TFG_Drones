@@ -40,6 +40,17 @@ public class CityBuilder : MonoBehaviour {
                 int index = Mathf.Clamp(edif.material_id, 0, misMateriales.Length - 1);
                 cubo.GetComponent<MeshRenderer>().material = misMateriales[index];
             }
+
+            // Remate de azotea: un reborde oscuro y fino que rompe la silueta de caja
+            // lisa. Se coloca como hermano del cubo (no como hijo) para no heredar su
+            // escala no uniforme.
+            GameObject remate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            remate.name = "Remate";
+            remate.transform.parent = cityParent.transform;
+            remate.transform.position = new Vector3(edif.x, edif.alto + 0.4f, edif.z);
+            remate.transform.localScale = new Vector3(edif.ancho * 1.03f, 0.8f, edif.largo * 1.03f);
+            Destroy(remate.GetComponent<Collider>());
+            remate.GetComponent<MeshRenderer>().material.color = new Color(0.2f, 0.2f, 0.2f);
         }
         Debug.Log("🏢 Ciudad generada con éxito.");
     }

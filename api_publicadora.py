@@ -35,8 +35,11 @@ def _generar_pasos(rutas_dron: list[dict]) -> list[dict]:
     Convierte la lista de viajes de un dron (2D, salida OR-Tools)
     en una secuencia de pasos 3D para Unity con ascenso/descenso en
     cada waypoint y recarga al volver a la base entre viajes.
+    Cada paso incluye 'cargado', que indica si el dron lleva un paquete
+    encima en ese momento (para que Unity muestre la caja de carga).
     """
     pasos = []
+    cargado = False  # el capacity=1 del PDP garantiza pickup/delivery alternados dentro de cada viaje
 
     for i_viaje, viaje in enumerate(rutas_dron):
         waypoints = viaje["waypoints"]
@@ -51,22 +54,27 @@ def _generar_pasos(rutas_dron: list[dict]) -> list[dict]:
             if es_primero:
                 if i_viaje == 0:
                     # Solo en el primer viaje: subir desde la base
-                    pasos.append({"x": px, "y": ALTITUD_VUELO, "z": pz, "accion": "vuelo"})
+                    pasos.append({"x": px, "y": ALTITUD_VUELO, "z": pz, "accion": "vuelo", "cargado": cargado})
                 # En viajes posteriores ya está en el aire (subió tras recargar)
                 continue
 
             if es_ultimo:
-                # Retorno a la base al final del viaje
-                pasos.append({"x": px, "y": ALTITUD_VUELO, "z": pz, "accion": "vuelo"})
-                pasos.append({"x": px, "y": ALTITUD_SUELO, "z": pz, "accion": "recargar"})
+                # Retorno a la base al final del viaje (siempre vacío: el PDP obliga a
+                # entregar antes de que el viaje pueda terminar)
+                pasos.append({"x": px, "y": ALTITUD_VUELO, "z": pz, "accion": "vuelo", "cargado": cargado})
+                pasos.append({"x": px, "y": ALTITUD_SUELO, "z": pz, "accion": "recargar", "cargado": cargado})
                 if not es_ultimo_viaje:
-                    pasos.append({"x": px, "y": ALTITUD_VUELO, "z": pz, "accion": "vuelo"})
+                    pasos.append({"x": px, "y": ALTITUD_VUELO, "z": pz, "accion": "vuelo", "cargado": cargado})
             else:
-                # Pickup o delivery: volar sobre él, bajar a la azotea, subir
+                # Pickup o delivery: volar sobre él, bajar a la azotea, subir.
+                # Dentro de cada viaje los nodos alternan recogida/entrega (capacidad
+                # unitaria), así que la posición impar es siempre una recogida.
+                es_recogida = (i_wp % 2 == 1)
                 alt = _altura_en(px, pz)
-                pasos.append({"x": px, "y": ALTITUD_VUELO, "z": pz, "accion": "vuelo"})
-                pasos.append({"x": px, "y": alt,           "z": pz, "accion": "maniobra"})
-                pasos.append({"x": px, "y": ALTITUD_VUELO, "z": pz, "accion": "vuelo"})
+                pasos.append({"x": px, "y": ALTITUD_VUELO, "z": pz, "accion": "vuelo", "cargado": cargado})
+                pasos.append({"x": px, "y": alt,           "z": pz, "accion": "maniobra", "cargado": cargado})
+                cargado = es_recogida  # tras recoger pasa a llevar carga; tras entregar, a ir vacío
+                pasos.append({"x": px, "y": ALTITUD_VUELO, "z": pz, "accion": "vuelo", "cargado": cargado})
 
     return pasos
 
@@ -120,7 +128,7 @@ def iniciar_simulacion(tiempo: int = 10):
 def siguiente_paso(dron_id: int):
     """
     Cada DronAgente llama aquí en bucle para obtener su próximo destino 3D.
-    Devuelve {estado, x, y, z, accion}.
+    Devuelve {estado, x, y, z, accion, cargado}.
     Cuando no quedan más pasos devuelve estado='completado'.
     """
     if dron_id not in _pasos_por_dron:
@@ -130,7 +138,7 @@ def siguiente_paso(dron_id: int):
     pasos = _pasos_por_dron[dron_id]
 
     if idx >= len(pasos):
-        return {"estado": "completado", "x": 0.0, "y": 0.0, "z": 0.0, "accion": ""}
+        return {"estado": "completado", "x": 0.0, "y": 0.0, "z": 0.0, "accion": "", "cargado": False}
 
     paso = pasos[idx]
     _puntero_por_dron[dron_id] += 1

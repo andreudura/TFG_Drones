@@ -43,7 +43,8 @@ def generar_ciudad_json(manzanas_x=10, manzanas_z=10, tamano_edificio=20, separa
                         "z": pos_z + (tamano_edificio / 2),
                         "ancho": tamano_edificio,
                         "largo": tamano_edificio,
-                        "alto": altura
+                        "alto": altura,
+                        "material_id": random.randint(0, 2)  # 0=cristal, 1=hormigon, 2=ladrillos (misMateriales en CityBuilder)
                     }
                     ciudad["edificios"].append(edificio)
 
