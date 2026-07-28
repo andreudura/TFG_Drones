@@ -1,12 +1,16 @@
+import logging
 import math
 import matplotlib.pyplot as plt
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 
+logger = logging.getLogger(__name__)
+
 # --- CONFIGURACIÓN ---
-NUM_DRONES_FISICOS  = 5
-VIAJES_MAX_POR_DRON = 10
-BASE_COORDS         = (1000, 1000)
+NUM_DRONES_FISICOS     = 5
+VIAJES_MAX_POR_DRON    = 10
+BASE_COORDS            = (1000, 1000)
+FACTOR_CONSUMO_CARGADO = 1.3  # +30% de batería consumida por unidad de distancia mientras el dron lleva un paquete
 
 
 class PlanificadorPDP:
@@ -62,10 +66,10 @@ class PlanificadorPDP:
         json_path = os.path.join(script_dir, 'ciudad.json')
         if not os.path.exists(json_path):
             json_path = 'ciudad.json'  # fallback: directorio de trabajo
-        print(f"Cargando ciudad desde: {json_path}")
+        logger.info("Cargando ciudad desde: %s", json_path)
         with open(json_path, encoding='utf-8') as f:
             ciudad = json.load(f)
-        print(f"  -> {len(ciudad['edificios'])} edificios cargados")
+        logger.info("%d edificios cargados", len(ciudad['edificios']))
         for edif in ciudad['edificios']:
             cx = edif['x'] / ESCALA
             cz = edif['z'] / ESCALA
@@ -139,7 +143,7 @@ class PlanificadorPDP:
             lineas_txt.extend(f"  {s}" for s in secuencias[d])
         with open("secuencias_drones.txt", "w", encoding="utf-8") as f:
             f.write('\n'.join(lineas_txt))
-        print("📋 Secuencias guardadas en secuencias_drones.txt")
+        logger.info("Secuencias guardadas en secuencias_drones.txt")
 
         # --- Ejes y título ---
         ax.set_xlim(0, 2000)
@@ -172,7 +176,7 @@ class PlanificadorPDP:
         plt.tight_layout()
         plt.savefig("mapa_pdp.png", dpi=150, bbox_inches="tight",
                     facecolor='#111111')
-        print("📸 Mapa PDP guardado en mapa_pdp.png")
+        logger.info("Mapa PDP guardado en mapa_pdp.png")
         plt.show()
 
     def generar_plan(self, segundos_para_pensar=10, mostrar_grafico=True):
@@ -191,16 +195,32 @@ class PlanificadorPDP:
         transit_callback_index = routing.RegisterTransitCallback(distance_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-        # 3. Restricción de Distancia (Batería simulada en metros)
+        # 2b. Callback de batería: el mismo tramo consume más autonomía si el dron
+        # va cargado. La capacidad unitaria (ver paso 5) obliga a que, tras una
+        # recogida, el siguiente nodo visitado sea forzosamente su propia entrega
+        # (no puede recoger un segundo paquete sin haber entregado el primero), así
+        # que basta con mirar si el nodo de origen del tramo es una recogida para
+        # saber si ese tramo se recorre con el paquete a bordo.
+        def bateria_callback(from_index, to_index):
+            from_node = manager.IndexToNode(from_index)
+            to_node = manager.IndexToNode(to_index)
+            dist = self._distancia(from_node, to_node)
+            if from_node in self.pickups_indices:
+                dist *= FACTOR_CONSUMO_CARGADO
+            return int(dist)
+
+        bateria_callback_index = routing.RegisterTransitCallback(bateria_callback)
+
+        # 3. Restricción de batería (autonomía simulada en metros equivalentes)
         routing.AddDimension(
-            transit_callback_index,
+            bateria_callback_index,
             0,  # slack
             6000,   # tope por viaje — con edificios a ~200u de distancia media caben unos 3-4 pedidos
             True,
-            'Distance')
+            'Bateria')
 
         # 4. PICKUP AND DELIVERY — el mismo dron recoge y entrega, en ese orden
-        distance_dimension = routing.GetDimensionOrDie('Distance')
+        bateria_dimension = routing.GetDimensionOrDie('Bateria')
 
         for i in range(self.num_pedidos):
             p_index = manager.NodeToIndex(self.pickups_indices[i])
@@ -212,8 +232,9 @@ class PlanificadorPDP:
             # Mismo vehículo para ambos
             routing.solver().Add(routing.VehicleVar(p_index) == routing.VehicleVar(d_index))
 
-            # P debe visitarse antes que D
-            routing.solver().Add(distance_dimension.CumulVar(p_index) <= distance_dimension.CumulVar(d_index))
+            # P debe visitarse antes que D (la dimensión de batería crece de forma
+            # monótona a lo largo de la ruta, así que sirve igual para el orden)
+            routing.solver().Add(bateria_dimension.CumulVar(p_index) <= bateria_dimension.CumulVar(d_index))
 
         # 5. Restricción de CAPACIDAD (Para llevar 1 paquete a la vez)
         def demand_callback(from_index):
@@ -282,6 +303,7 @@ class PlanificadorPDP:
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     import crear_db
     crear_db.NUM_PEDIDOS = 70
     crear_db.inicializar_db()
@@ -290,13 +312,13 @@ if __name__ == '__main__':
     resultado, coste = planificador.generar_plan(segundos_para_pensar=10, mostrar_grafico=True)
 
     if resultado:
-        print(f"\nCoste total: {coste}")
+        logger.info("Coste total: %s", coste)
         rutas_por_dron = {}
         for entrada in resultado:
             rutas_por_dron.setdefault(entrada["dron_id"], []).append(entrada)
         for did in sorted(rutas_por_dron):
             viajes = sorted(rutas_por_dron[did], key=lambda r: r["viaje_id"])
-            print(f"\n=== Dron {did} ===")
+            logger.info("=== Dron %d ===", did)
             for viaje in viajes:
                 wps = viaje["waypoints"]
                 nodos_intermedios = wps[1:-1]
@@ -312,4 +334,4 @@ if __name__ == '__main__':
                             pedido_ids.append(f"entrega#{pid}")
                             break
                 secuencia = " -> ".join(pedido_ids) + " -> recarga"
-                print(f"  Viaje {viaje['viaje_id']}: {secuencia}")
+                logger.info("  Viaje %s: %s", viaje['viaje_id'], secuencia)
