@@ -1,8 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 import json
+import logging
 import crear_db
 import motor_ia
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -120,7 +124,7 @@ def iniciar_simulacion(tiempo: int = 10):
     _puntero_por_dron  = {did: 0 for did in _pasos_por_dron}
 
     drones_activos = sorted(_pasos_por_dron.keys())
-    print(f"✅ Simulación lista: {len(drones_activos)} drones activos, coste={coste:.0f}")
+    logger.info("Simulación lista: %d drones activos, coste=%.0f", len(drones_activos), coste)
     return {"status": "success", "drones_activos": drones_activos}
 
 
@@ -155,7 +159,7 @@ def calcular(tiempo: int = 10, grafico: bool = True):
 
     planificador = motor_ia.PlanificadorPDP(datos)
 
-    print(f"🧠 Pensando durante {tiempo} segundos... (Gráfico: {grafico})")
+    logger.info("Pensando durante %d segundos... (gráfico: %s)", tiempo, grafico)
 
     resultado, coste = planificador.generar_plan(
         segundos_para_pensar=tiempo,
