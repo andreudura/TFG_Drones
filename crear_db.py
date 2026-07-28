@@ -1,6 +1,9 @@
 import sqlite3
 import random
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 DB_NAME     = "drones.db"
 NUM_PEDIDOS = 70
@@ -27,7 +30,7 @@ def inicializar_db():
 
     cursor.execute('DELETE FROM envios')
 
-    print(f"Generando {NUM_PEDIDOS} envios sobre azoteas de edificios...")
+    logger.info("Generando %d envios sobre azoteas de edificios...", NUM_PEDIDOS)
 
     # Cada pedido: origen y destino en centros de edificios distintos
     for _ in range(NUM_PEDIDOS):
@@ -49,7 +52,7 @@ def inicializar_db():
 
     conn.commit()
     conn.close()
-    print("✅ Base de datos PDP lista.")
+    logger.info("Base de datos PDP lista.")
 
 
 def leer_pedidos():
@@ -63,4 +66,5 @@ def leer_pedidos():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     inicializar_db()
