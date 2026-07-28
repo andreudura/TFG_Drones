@@ -1,31 +1,34 @@
+import logging
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import crear_db
 import motor_ia
 import time
 
+logger = logging.getLogger(__name__)
+
 # Intervalos de prueba (segundos). Tiempo total estimado: ~9 minutos.
 TIEMPOS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 45, 60, 80, 100, 120, 300]
 
 
 def ejecutar_benchmark():
-    print("📂 Leyendo DB PDP...")
+    logger.info("Leyendo DB PDP...")
     datos = crear_db.leer_pedidos()
     if not datos:
-        print("❌ DB vacía. Ejecuta crear_db.py primero.")
+        logger.error("DB vacía. Ejecuta crear_db.py primero.")
         return
 
     n_pedidos = len(datos)
-    print(f"   → {n_pedidos} pedidos cargados.")
+    logger.info("%d pedidos cargados.", n_pedidos)
     planificador = motor_ia.PlanificadorPDP(datos)
 
     costes = []
     tiempos_reales = []
 
-    print(f"\n🧪 BENCHMARK PDP — {n_pedidos} pedidos, {motor_ia.NUM_DRONES_FISICOS} drones")
-    print(f"   Intervalos: {TIEMPOS}")
-    print(f"   Tiempo total estimado: ~{sum(TIEMPOS)//60} min {sum(TIEMPOS)%60} s")
-    print("-" * 55)
+    logger.info("BENCHMARK PDP — %d pedidos, %d drones", n_pedidos, motor_ia.NUM_DRONES_FISICOS)
+    logger.info("Intervalos: %s", TIEMPOS)
+    logger.info("Tiempo total estimado: ~%d min %d s", sum(TIEMPOS) // 60, sum(TIEMPOS) % 60)
+    logger.info("-" * 55)
 
     for t in TIEMPOS:
         start = time.time()
@@ -36,7 +39,7 @@ def ejecutar_benchmark():
         elapsed = round(time.time() - start, 1)
         tiempos_reales.append(elapsed)
         costes.append(coste if coste else 0)
-        print(f"  t={t:>4}s  →  coste={coste:>10,}   (real: {elapsed}s)")
+        logger.info("t=%4ds  ->  coste=%10s   (real: %ss)", t, f"{coste:,}", elapsed)
 
     _guardar_grafica(costes, n_pedidos)
 
@@ -77,9 +80,10 @@ def _guardar_grafica(costes, n_pedidos):
     plt.tight_layout()
     nombre = "experimento_benchmark.png"
     plt.savefig(nombre, dpi=150, bbox_inches="tight")
-    print(f"\n✅ Gráfica guardada como '{nombre}'")
+    logger.info("Gráfica guardada como '%s'", nombre)
     plt.show()
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     ejecutar_benchmark()
