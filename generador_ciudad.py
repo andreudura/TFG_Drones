@@ -1,12 +1,15 @@
 import json
+import logging
 import random
+
+logger = logging.getLogger(__name__)
 
 
 def generar_ciudad_json(manzanas_x=10, manzanas_z=10, tamano_edificio=20, separacion_interna=2, ancho_calle=15):
     ciudad = {"edificios": [], "azoteas": []}
     edificio_id = 0
 
-    print("🏗️ Generando ciudad procedimental (Manzanas de 4 edificios)...")
+    logger.info("Generando ciudad procedimental (manzanas de 4 edificios)...")
 
     # Una manzana tendrá 2x2 = 4 edificios.
     edificios_por_manzana_lado = 2
@@ -64,11 +67,12 @@ def generar_ciudad_json(manzanas_x=10, manzanas_z=10, tamano_edificio=20, separa
 
     # Calculamos el total de edificios generados
     total_edificios = manzanas_x * manzanas_z * (edificios_por_manzana_lado ** 2)
-    print(f"✅ Ciudad generada con {total_edificios} edificios.")
-    print(f"🛣️ Agrupados en {manzanas_x * manzanas_z} manzanas separadas por calles de {ancho_calle}m.")
+    logger.info("Ciudad generada con %d edificios.", total_edificios)
+    logger.info("Agrupados en %d manzanas separadas por calles de %sm.", manzanas_x * manzanas_z, ancho_calle)
 
     return ciudad["azoteas"]
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     generar_ciudad_json()
